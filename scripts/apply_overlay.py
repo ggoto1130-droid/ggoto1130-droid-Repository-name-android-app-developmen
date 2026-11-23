@@ -78,7 +78,14 @@ def main() -> None:
     gradle, changed_version_code = re.subn(r'versionCode\s*=\s*AppConfig\.versionCode', 'versionCode = 1', gradle, count=1)
     gradle, changed_version_name = re.subn(r'versionName\s*=\s*AppConfig\.versionName', 'versionName = "1.0.0"', gradle, count=1)
     gradle, changed_debug_suffix = re.subn(r'(?m)^\s+applicationIdSuffix\s*=\s*"\.dev"\s*\n', '', gradle, count=1)
-    if (changed_id, changed_version_code, changed_version_name, changed_debug_suffix) != (1, 1, 1, 1):
+    gradle, changed_abis = re.subn(
+        r'abiFilters\.addAll\(listOf\("arm64-v8a", "x86_64"\)\)',
+        'abiFilters.add("arm64-v8a")',
+        gradle,
+        count=1,
+    )
+    gradle, removed_32bit_abi = re.subn(r'(?m)^\s*abiFilters\.add\("armeabi-v7a"\)\s*\n', '', gradle, count=1)
+    if (changed_id, changed_version_code, changed_version_name, changed_debug_suffix, changed_abis, removed_32bit_abi) != (1, 1, 1, 1, 1, 1):
         raise SystemExit("Could not safely update the application ID and version")
     app_gradle.write_text(gradle, encoding="utf-8")
 
