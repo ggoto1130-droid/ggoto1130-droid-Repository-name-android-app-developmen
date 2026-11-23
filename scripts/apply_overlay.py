@@ -25,7 +25,8 @@ def main() -> None:
     manifest = UPSTREAM / "app/src/main/AndroidManifest.xml"
     app_gradle = UPSTREAM / "app/build.gradle.kts"
     strings = UPSTREAM / "app/src/main/res/values/strings.xml"
-    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file():
+    app_config = UPSTREAM / "buildSrc/src/main/kotlin/AppConfig.kt"
+    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file() or not app_config.is_file():
         raise SystemExit(f"Not a melonDS Android source checkout: {UPSTREAM}")
 
     tree = ET.parse(manifest)
@@ -90,6 +91,12 @@ def main() -> None:
     if changed_label != 1:
         raise SystemExit("Could not find the app_name resource")
     strings.write_text(strings_xml, encoding="utf-8")
+
+    config = app_config.read_text(encoding="utf-8")
+    config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 36', config, count=1)
+    if changed_sdk != 1:
+        raise SystemExit("Could not safely set the supported Android 16 SDK level")
+    app_config.write_text(config, encoding="utf-8")
 
     source_overlay = ROOT / "overlay/app/src/main/java/org/syun/pokemonw2"
     source_target = UPSTREAM / "app/src/main/java/org/syun/pokemonw2"
