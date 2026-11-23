@@ -114,7 +114,50 @@ def main() -> None:
     }
     for name, (current, compatible) in compatible_versions.items():
         catalog, changed = re.subn(
-            rf'(?m)^({re.escape(name)}\\s*=\\s*)"{re.escape(current)}"$',
+            rf'(?m)^({re.escape(name)}\s*=\s*)"{re.escape(current)}"
+            rf'\1"{compatible}"',
+            catalog,
+            count=1,
+        )
+        if changed != 1:
+            raise SystemExit(f"Could not select Android 16-compatible dependency version for {name}")
+    version_catalog.write_text(catalog, encoding="utf-8")
+    source_overlay = ROOT / "overlay/app/src/main/java/org/syun/pokemonw2"
+    source_target = UPSTREAM / "app/src/main/java/org/syun/pokemonw2"
+    shutil.copytree(source_overlay, source_target, dirs_exist_ok=True)
+
+    rom_path = os.environ.get("POKEMON_ROM_PATH")
+    if rom_path:
+        rom = Path(rom_path)
+        if not rom.is_file():
+            raise SystemExit(f"POKEMON_ROM_PATH does not exist: {rom}")
+        expected_size = 536_870_912
+        expected_hash = "3b3f91fe0e4cc323ea73a1d6242fa04b255d98c4e44971594624bad919713a7b"
+        if rom.stat().st_size != expected_size:
+            raise SystemExit(f"The NDS image must be {expected_size} bytes")
+        digest = hashlib.sha256()
+        with rom.open("rb") as source:
+            header = source.read(16)
+            if header[:10] != b"POKEMON W2" or header[12:16] != b"IRDO":
+                raise SystemExit("The NDS image is not Pokémon White 2 (IRDO)")
+            source.seek(0)
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_hash:
+            raise SystemExit("The NDS image SHA-256 does not match the verified build input")
+        asset_target = UPSTREAM / "app/src/main/assets/bundled/pokemon_white2.nds"
+        asset_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(rom, asset_target)
+        print("Added user-provided game image to this private build workspace.")
+    elif os.environ.get("ALLOW_MISSING_ROM") == "1":
+        print("Building a source-check APK without a game image; it is not playable.")
+    else:
+        raise SystemExit("Set POKEMON_ROM_PATH to the private game image. The ROM is never added to this repository.")
+
+
+if __name__ == "__main__":
+    main()
+,
             rf'\\1"{compatible}"',
             catalog,
             count=1,
