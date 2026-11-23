@@ -25,9 +25,10 @@ def main() -> None:
     manifest = UPSTREAM / "app/src/main/AndroidManifest.xml"
     app_gradle = UPSTREAM / "app/build.gradle.kts"
     strings = UPSTREAM / "app/src/main/res/values/strings.xml"
+    debug_strings = UPSTREAM / "app/src/debug/res/values/strings.xml"
     app_config = UPSTREAM / "buildSrc/src/main/kotlin/AppConfig.kt"
     version_catalog = UPSTREAM / "gradle/libs.versions.toml"
-    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file() or not app_config.is_file() or not version_catalog.is_file():
+    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file() or not debug_strings.is_file() or not app_config.is_file() or not version_catalog.is_file():
         raise SystemExit(f"Not a melonDS Android source checkout: {UPSTREAM}")
 
     tree = ET.parse(manifest)
@@ -100,6 +101,18 @@ def main() -> None:
     if changed_label != 1:
         raise SystemExit("Could not find the app_name resource")
     strings.write_text(strings_xml, encoding="utf-8")
+
+    debug_strings_xml = debug_strings.read_text(encoding="utf-8")
+    debug_strings_xml, changed_debug_label = re.subn(
+        r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+        r'\1ポケモン ホワイト2\2',
+        debug_strings_xml,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if changed_debug_label != 1:
+        raise SystemExit("Could not find the debug app_name resource")
+    debug_strings.write_text(debug_strings_xml, encoding="utf-8")
 
     config = app_config.read_text(encoding="utf-8")
     config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 36', config, count=1)
