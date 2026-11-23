@@ -93,9 +93,15 @@ def main() -> None:
     strings.write_text(strings_xml, encoding="utf-8")
 
     config = app_config.read_text(encoding="utf-8")
-    config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 36', config, count=1)
-    if changed_sdk != 1:
-        raise SystemExit("Could not safely set the supported Android 16 SDK level")
+    config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 37', config, count=1)
+    config, changed_target = re.subn(
+        r'const val targetSdkVersion = compileSdkVersion',
+        'const val targetSdkVersion = 36',
+        config,
+        count=1,
+    )
+    if (changed_sdk, changed_target) != (1, 1):
+        raise SystemExit("Could not safely separate compile SDK 37 from Android 16 target SDK 36")
     app_config.write_text(config, encoding="utf-8")
 
     source_overlay = ROOT / "overlay/app/src/main/java/org/syun/pokemonw2"
