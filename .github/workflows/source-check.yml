@@ -40,6 +40,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pokemon-white2-source-check
-          path: melonDS-android/app/build/outputs/apk/gitHubProd/debug/app-gitHubProd-debug.apk
+          path: melonDS-android/app/build/outputs/apk/
           if-no-files-found: error
           retention-days: 1
