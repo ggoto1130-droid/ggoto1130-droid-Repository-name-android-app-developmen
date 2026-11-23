@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ class StandaloneLauncherActivity : AppCompatActivity() {
     private var gameActivityStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         val recoveredFromInterruptedLaunch = applyLaunchDefaultsAndRecovery()
         showPreparingScreen()

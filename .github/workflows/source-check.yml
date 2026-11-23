@@ -43,3 +43,26 @@ jobs:
           path: melonDS-android/app/build/outputs/apk/
           if-no-files-found: error
           retention-days: 1
+
+  check-launcher:
+    needs: compile-overlay
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: pokemon-white2-source-check
+          path: ci-apk
+      - name: Enable KVM for the test device
+        run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Install and open the launcher on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -camera-back none
+          script: bash scripts/check-launcher.sh ci-apk/gitHubProd/debug/app-gitHub-prod-debug.apk
