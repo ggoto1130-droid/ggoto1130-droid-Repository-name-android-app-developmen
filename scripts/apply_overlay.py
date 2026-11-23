@@ -26,7 +26,8 @@ def main() -> None:
     app_gradle = UPSTREAM / "app/build.gradle.kts"
     strings = UPSTREAM / "app/src/main/res/values/strings.xml"
     app_config = UPSTREAM / "buildSrc/src/main/kotlin/AppConfig.kt"
-    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file() or not app_config.is_file():
+    version_catalog = UPSTREAM / "gradle/libs.versions.toml"
+    if not manifest.is_file() or not app_gradle.is_file() or not strings.is_file() or not app_config.is_file() or not version_catalog.is_file():
         raise SystemExit(f"Not a melonDS Android source checkout: {UPSTREAM}")
 
     tree = ET.parse(manifest)
@@ -93,17 +94,34 @@ def main() -> None:
     strings.write_text(strings_xml, encoding="utf-8")
 
     config = app_config.read_text(encoding="utf-8")
-    config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 37', config, count=1)
+    config, changed_sdk = re.subn(r'const val compileSdkVersion = \d+', 'const val compileSdkVersion = 36', config, count=1)
     config, changed_target = re.subn(
         r'const val targetSdkVersion = compileSdkVersion',
         'const val targetSdkVersion = 36',
         config,
         count=1,
     )
-    if (changed_sdk, changed_target) != (1, 1):
-        raise SystemExit("Could not safely separate compile SDK 37 from Android 16 target SDK 36")
+    if changed_sdk != 1 or changed_target not in (0, 1):
+        raise SystemExit("Could not safely configure the app for Android 16")
     app_config.write_text(config, encoding="utf-8")
 
+    catalog = version_catalog.read_text(encoding="utf-8")
+    compatible_versions = {
+        "composeBom": ("2026.08.00", "2026.06.00"),
+        "core": ("1.19.0", "1.18.0"),
+        "lifecycleViewModel": ("2.11.0", "2.10.0"),
+        "okHttp": ("5.5.0", "5.4.0"),
+    }
+    for name, (current, compatible) in compatible_versions.items():
+        catalog, changed = re.subn(
+            rf'(?m)^({re.escape(name)}\\s*=\\s*)"{re.escape(current)}"$',
+            rf'\\1"{compatible}"',
+            catalog,
+            count=1,
+        )
+        if changed != 1:
+            raise SystemExit(f"Could not select Android 16-compatible dependency version for {name}")
+    version_catalog.write_text(catalog, encoding="utf-8")
     source_overlay = ROOT / "overlay/app/src/main/java/org/syun/pokemonw2"
     source_target = UPSTREAM / "app/src/main/java/org/syun/pokemonw2"
     shutil.copytree(source_overlay, source_target, dirs_exist_ok=True)
