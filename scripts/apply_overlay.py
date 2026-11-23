@@ -124,6 +124,23 @@ def main() -> None:
             raise SystemExit(f"Could not select Android 16-compatible dependency version for {name}")
     version_catalog.write_text(catalog, encoding="utf-8")
 
+    # Material 3 Adaptive 1.2 is the Android 16-compatible release. Use its
+    # stable API name in the three UI call sites introduced in Adaptive 1.3.
+    adaptive_api_files = (
+        "app/src/main/java/me/magnum/melonds/ui/cheats/ui/cheatform/CheatForm.kt",
+        "app/src/main/java/me/magnum/melonds/ui/dsiwaremanager/ui/DSiWareRomListDialog.kt",
+        "app/src/main/java/me/magnum/melonds/ui/romdetails/ui/RomHeaderUi.kt",
+    )
+    for relative_path in adaptive_api_files:
+        source = UPSTREAM / relative_path
+        source_text = source.read_text(encoding="utf-8")
+        if source_text.count("currentWindowAdaptiveInfoV2") != 2:
+            raise SystemExit(f"Unexpected Adaptive API usage in {relative_path}")
+        source.write_text(
+            source_text.replace("currentWindowAdaptiveInfoV2", "currentWindowAdaptiveInfo"),
+            encoding="utf-8",
+        )
+
     source_overlay = ROOT / "overlay/app/src/main/java/org/syun/pokemonw2"
     source_target = UPSTREAM / "app/src/main/java/org/syun/pokemonw2"
     shutil.copytree(source_overlay, source_target, dirs_exist_ok=True)
