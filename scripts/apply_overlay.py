@@ -77,7 +77,8 @@ def main() -> None:
     gradle, changed_id = re.subn(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "org.syun.pokemonw2.standalone"', gradle, count=1)
     gradle, changed_version_code = re.subn(r'versionCode\s*=\s*AppConfig\.versionCode', 'versionCode = 1', gradle, count=1)
     gradle, changed_version_name = re.subn(r'versionName\s*=\s*AppConfig\.versionName', 'versionName = "1.0.0"', gradle, count=1)
-    if (changed_id, changed_version_code, changed_version_name) != (1, 1, 1):
+    gradle, changed_debug_suffix = re.subn(r'(?m)^\s+applicationIdSuffix\s*=\s*"\.dev"\s*\n', '', gradle, count=1)
+    if (changed_id, changed_version_code, changed_version_name, changed_debug_suffix) != (1, 1, 1, 1):
         raise SystemExit("Could not safely update the application ID and version")
     app_gradle.write_text(gradle, encoding="utf-8")
 
