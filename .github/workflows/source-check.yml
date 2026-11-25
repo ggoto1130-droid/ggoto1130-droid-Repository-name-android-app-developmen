@@ -44,25 +44,57 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Build an original crash reproduction and a generated cartridge for Android QA
+        env:
+          PREVIOUS_COMMIT: ef581b3d501ed8e3a02560e3a7c04ed1713d43b6
+        run: |
+          mkdir -p qa
+          launcher=app/src/main/java/org/syun/pokemonw2/StandaloneLauncherActivity.kt
+          apk=melonDS-android/app/build/outputs/apk/gitHubProd/debug/app-gitHub-prod-debug.apk
+          cp "melonDS-android/$launcher" "$RUNNER_TEMP/launcher-fixed.kt"
+          cp melonDS-android/app/build.gradle.kts "$RUNNER_TEMP/build-fixed.gradle.kts"
+          git fetch --no-tags --depth=1 origin "$PREVIOUS_COMMIT"
+          git show "$PREVIOUS_COMMIT:overlay/$launcher" > "melonDS-android/$launcher"
+          sed -i -e 's/versionCode = 2$/versionCode = 1/' -e 's/versionName = "1.0.1"/versionName = "1.0.0"/' melonDS-android/app/build.gradle.kts
+          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
+          cp "$apk" qa/v100.apk
+          cp "$RUNNER_TEMP/launcher-fixed.kt" "melonDS-android/$launcher"
+          cp "$RUNNER_TEMP/build-fixed.gradle.kts" melonDS-android/app/build.gradle.kts
+          python3 scripts/check-game-render.py prepare melonDS-android
+          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
+          cp "$apk" qa/v101-test-display.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: two-version-render-test-only
+          path: qa/*.apk
+          if-no-files-found: error
+          retention-days: 1
+
   check-launcher:
     needs: compile-overlay
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    name: Android API ${{ matrix.api }} update and native game display
+    timeout-minutes: 24
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 36]
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: pokemon-white2-source-check
-          path: ci-apk
+          name: two-version-render-test-only
+          path: qa
       - name: Enable KVM for the test device
         run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
       - name: Install and open the launcher on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: ${{ matrix.api }}
+          ram-size: 4096M
           target: google_apis
           arch: x86_64
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -camera-back none
-          script: bash scripts/check-launcher.sh ci-apk/gitHubProd/debug/app-gitHub-prod-debug.apk
+          script: python3 scripts/check-game-render.py verify qa/v100.apk qa/v101-test-display.apk
