@@ -47,20 +47,27 @@ jobs:
       - name: Build an original crash reproduction and a generated cartridge for Android QA
         env:
           PREVIOUS_COMMIT: ef581b3d501ed8e3a02560e3a7c04ed1713d43b6
+          PREVIOUS_PROFILE: 55807e5616b48326bd5c7c7babe2d39a6ecbf3b6
         run: |
           mkdir -p qa
           launcher=app/src/main/java/org/syun/pokemonw2/StandaloneLauncherActivity.kt
           apk=melonDS-android/app/build/outputs/apk/gitHubProd/debug/app-gitHub-prod-debug.apk
           cp "melonDS-android/$launcher" "$RUNNER_TEMP/launcher-fixed.kt"
           cp melonDS-android/app/build.gradle.kts "$RUNNER_TEMP/build-fixed.gradle.kts"
-          git fetch --no-tags --depth=1 origin "$PREVIOUS_COMMIT"
+          git fetch --no-tags --depth=1 origin "$PREVIOUS_COMMIT" "$PREVIOUS_PROFILE"
           git show "$PREVIOUS_COMMIT:overlay/$launcher" > "melonDS-android/$launcher"
-          sed -i -e 's/versionCode = 2$/versionCode = 1/' -e 's/versionName = "1.0.1"/versionName = "1.0.0"/' melonDS-android/app/build.gradle.kts
+          sed -i -e 's/versionCode = [0-9][0-9]*$/versionCode = 1/' -e 's/versionName = "[0-9.]*"/versionName = "1.0.0"/' melonDS-android/app/build.gradle.kts
           (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
           cp "$apk" qa/v100.apk
           cp "$RUNNER_TEMP/launcher-fixed.kt" "melonDS-android/$launcher"
           cp "$RUNNER_TEMP/build-fixed.gradle.kts" melonDS-android/app/build.gradle.kts
           python3 scripts/check-game-render.py prepare melonDS-android
+          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
+          cp "$apk" qa/candidate-test-display.apk
+          git show "$PREVIOUS_PROFILE:overlay/$launcher" > "melonDS-android/$launcher"
+          test_hash=$(sha256sum melonDS-android/app/src/main/assets/bundled/pokemon_white2.nds | cut -d' ' -f1)
+          sed -i "s/3b3f91fe0e4cc323ea73a1d6242fa04b255d98c4e44971594624bad919713a7b/$test_hash/g" "melonDS-android/$launcher"
+          sed -i -e 's/versionCode = [0-9][0-9]*$/versionCode = 2/' -e 's/versionName = "[0-9.]*"/versionName = "1.0.1"/' melonDS-android/app/build.gradle.kts
           (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
           cp "$apk" qa/v101-test-display.apk
       - uses: actions/upload-artifact@v4
@@ -97,4 +104,11 @@ jobs:
           target: google_apis
           arch: x86_64
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -camera-back none
-          script: python3 scripts/check-game-render.py verify qa/v100.apk qa/v101-test-display.apk
+          script: python3 scripts/check-game-render.py verify qa/v100.apk qa/v101-test-display.apk qa/candidate-test-display.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-evidence-api-${{ matrix.api }}
+          path: qa/evidence/
+          if-no-files-found: ignore
+          retention-days: 5

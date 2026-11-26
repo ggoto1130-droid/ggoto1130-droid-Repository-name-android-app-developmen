@@ -76,8 +76,8 @@ def main() -> None:
 
     gradle = app_gradle.read_text(encoding="utf-8")
     gradle, changed_id = re.subn(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "org.syun.pokemonw2.standalone"', gradle, count=1)
-    gradle, changed_version_code = re.subn(r'versionCode\s*=\s*AppConfig\.versionCode', 'versionCode = 2', gradle, count=1)
-    gradle, changed_version_name = re.subn(r'versionName\s*=\s*AppConfig\.versionName', 'versionName = "1.0.1"', gradle, count=1)
+    gradle, changed_version_code = re.subn(r'versionCode\s*=\s*AppConfig\.versionCode', 'versionCode = 3', gradle, count=1)
+    gradle, changed_version_name = re.subn(r'versionName\s*=\s*AppConfig\.versionName', 'versionName = "1.0.2"', gradle, count=1)
     gradle, changed_debug_suffix = re.subn(r'(?m)^\s+applicationIdSuffix\s*=\s*"\.dev"\s*\n', '', gradle, count=1)
     gradle, changed_abis = re.subn(
         r'abiFilters\.addAll\(listOf\("arm64-v8a", "x86_64"\)\)',

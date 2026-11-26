@@ -1,7 +1,6 @@
 package org.syun.pokemonw2
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -30,11 +29,8 @@ class StandaloneLauncherActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        val recoveredFromInterruptedLaunch = applyLaunchDefaultsAndRecovery()
+        applyLaunchDefaults()
         showPreparingScreen()
-        if (recoveredFromInterruptedLaunch) {
-            status.text = "前回の起動が停止したため、互換性を優先して再起動しています…"
-        }
 
         lifecycleScope.launch {
             try {
@@ -48,17 +44,9 @@ class StandaloneLauncherActivity : AppCompatActivity() {
                 val intent = Intent(this@StandaloneLauncherActivity, EmulatorActivity::class.java)
                     .setDataAndType(uri, GameProvider.MIME_TYPE)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                PreferenceManager.getDefaultSharedPreferences(this@StandaloneLauncherActivity)
-                    .edit()
-                    .putBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, true)
-                    .commit()
                 startActivity(intent)
                 gameActivityStarted = true
             } catch (error: Exception) {
-                PreferenceManager.getDefaultSharedPreferences(this@StandaloneLauncherActivity)
-                    .edit()
-                    .putBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, false)
-                    .apply()
                 Log.e(TAG, "Unable to prepare or launch Pokémon White 2", error)
                 progress.visibility = ProgressBar.GONE
                 status.text = "ゲームを起動できませんでした。空き容量とゲームデータを確認して、もう一度開いてください。\n\n${error.message ?: error.javaClass.simpleName}"
@@ -69,10 +57,6 @@ class StandaloneLauncherActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (gameActivityStarted) {
-            PreferenceManager.getDefaultSharedPreferences(this)
-                .edit()
-                .putBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, false)
-                .apply()
             finish()
         }
     }
@@ -98,31 +82,20 @@ class StandaloneLauncherActivity : AppCompatActivity() {
         setContentView(root)
     }
 
-    private fun applyLaunchDefaultsAndRecovery(): Boolean {
+    private fun applyLaunchDefaults() {
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
-        if (preferences.getBoolean(KEY_DEFAULTS_APPLIED, false)) {
-            val interrupted = preferences.getBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, false)
-            if (interrupted) {
-                preferences.edit()
-                    .putBoolean("enable_jit", false)
-                    .putString("video_renderer", "software")
-                    .putBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, false)
-                    .commit()
-            }
-            return interrupted
-        }
+        if (preferences.getBoolean(KEY_COMPATIBILITY_DEFAULTS_APPLIED, false)) return
 
-        val supportsJit = Build.SUPPORTED_64_BIT_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
+        // Older releases saved OpenGL and JIT on first launch. Migrate that profile
+        // before the game activity reads it, including installs updated in place.
         preferences.edit()
             .putBoolean("github_check_for_updates", false)
             .putBoolean("use_custom_bios", false)
             .putBoolean("show_bios", false)
-            .putBoolean("enable_jit", supportsJit)
-            .putString("video_renderer", "opengl")
-            .putBoolean(KEY_DEFAULTS_APPLIED, true)
-            .putBoolean(KEY_GAME_LAUNCH_IN_PROGRESS, false)
-            .commit()
-        return false
+            .putBoolean("enable_jit", false)
+            .putString("video_renderer", "software")
+            .putBoolean(KEY_COMPATIBILITY_DEFAULTS_APPLIED, true)
+            .apply()
     }
 
     private fun ensureGameImage(): File {
@@ -193,8 +166,7 @@ class StandaloneLauncherActivity : AppCompatActivity() {
         private const val EXPECTED_SIZE = 536_870_912L
         private const val EXPECTED_SHA256 = "3b3f91fe0e4cc323ea73a1d6242fa04b255d98c4e44971594624bad919713a7b"
         private const val COPY_BUFFER_SIZE = 64 * 1024
-        private const val KEY_DEFAULTS_APPLIED = "pokemon_standalone_defaults_v1"
-        private const val KEY_GAME_LAUNCH_IN_PROGRESS = "pokemon_game_launch_in_progress_v1"
+        private const val KEY_COMPATIBILITY_DEFAULTS_APPLIED = "pokemon_standalone_compatibility_v2"
         private const val KEY_IMAGE_VERIFIED = "pokemon_w2_image_verified_v1"
     }
 }

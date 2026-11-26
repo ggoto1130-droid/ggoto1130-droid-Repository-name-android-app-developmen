@@ -107,7 +107,9 @@ def matches_frame(raw):
             magenta_rows.append(y)
     return len(green_rows) >= 6 and len(magenta_rows) >= 6 and green_rows[-1] < magenta_rows[0]
 
-def verify(previous, candidate):
+def verify(previous, black_screen_release, candidate):
+    evidence = Path("qa/evidence")
+    evidence.mkdir(parents=True, exist_ok=True)
     adb = str(Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb")
     def call(*args, **kwargs):
         return subprocess.run([adb, *args], check=True, timeout=120, **kwargs)
@@ -131,20 +133,41 @@ def verify(previous, candidate):
     print("PASS: 1.0.0 reproduced the original AppCompat startup exception.", flush=True)
     call("shell", "run-as", PACKAGE, "mkdir", "-p", "files")
     call("shell", "run-as", PACKAGE, "touch", "files/qa-update-marker")
+    call("install", "-r", str(black_screen_release))
+    start()
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        old_preferences = call("shell", "run-as", PACKAGE, "ls", "files",
+                               capture_output=True, text=True).stdout
+        if "pokemon_white2.nds" in old_preferences.splitlines():
+            break
+        time.sleep(1)
+    else:
+        raise RuntimeError("The intermediate release did not initialise its cartridge")
+    prefs_path = f"shared_prefs/{PACKAGE}_preferences.xml"
+    old_preferences = call("shell", "run-as", PACKAGE, "cat", prefs_path,
+                           capture_output=True, text=True).stdout
+    if 'name="video_renderer">opengl<' not in old_preferences:
+        raise RuntimeError("Could not reproduce the persisted OpenGL profile")
     call("install", "-r", str(candidate))
     call("shell", "run-as", PACKAGE, "ls", "files/qa-update-marker")
-    print("PASS: 1.0.0 to 1.0.1 update retained prior app data.", flush=True)
-    # Test the first run after update, then the verified-image fast path after a process restart.
-    for run in ("first", "second"):
+    print("PASS: updates from 1.0.0 through 1.0.1 retained prior app data.", flush=True)
+
+    for run in ("updated", "reopened", "fresh"):
+        if run == "fresh":
+            call("shell", "pm", "clear", PACKAGE)
         call("shell", "am", "force-stop", PACKAGE)
         start()
         deadline = time.monotonic() + 150
         while time.monotonic() < deadline:
             if matches_frame(call("exec-out", "screencap", capture_output=True).stdout):
+                (evidence / f"{run}.png").write_bytes(call("exec-out", "screencap", "-p", capture_output=True).stdout)
                 print(f"PASS: {run} launcher start rendered both diagnostic bands.", flush=True)
                 break
             time.sleep(2)
         else:
+            (evidence / f"{run}-failed.png").write_bytes(call("exec-out", "screencap", "-p", capture_output=True).stdout)
+            (evidence / f"{run}-logcat.txt").write_bytes(call("logcat", "-d", capture_output=True).stdout)
             call("logcat", "-b", "crash", "-d")
             raise RuntimeError(f"Missing native game frame on {run} launch")
 
@@ -152,6 +175,6 @@ if __name__ == "__main__":
     if sys.argv[1] == "prepare":
         prepare(Path(sys.argv[2]))
     elif sys.argv[1] == "verify":
-        verify(Path(sys.argv[2]), Path(sys.argv[3]))
+        verify(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]))
     else:
-        raise SystemExit("Use prepare CHECKOUT or verify OLD_APK CANDIDATE_APK")
+        raise SystemExit("Use prepare CHECKOUT or verify OLD_APK INTERMEDIATE_APK CANDIDATE_APK")
