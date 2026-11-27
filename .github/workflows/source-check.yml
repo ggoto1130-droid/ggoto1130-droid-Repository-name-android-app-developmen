@@ -42,7 +42,7 @@ jobs:
           name: pokemon-white2-source-check
           path: melonDS-android/app/build/outputs/apk/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
 
       - name: Build an original crash reproduction and a generated cartridge for Android QA
         env:
@@ -75,7 +75,7 @@ jobs:
           name: two-version-render-test-only
           path: qa/*.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
 
   check-launcher:
     needs: compile-overlay
