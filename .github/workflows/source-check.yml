@@ -1,114 +1,41 @@
-name: Android source check
-
+name: Verify private delivery on Android 16
 on:
   push:
-  pull_request:
-  workflow_dispatch:
-
+    branches: [codex/pokemon-white2-device-check]
 permissions:
   contents: read
-
 jobs:
-  compile-overlay:
+  android:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-          accept-android-sdk-licenses: true
-      - name: Install Android build components
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.0.13004108' 'cmake;3.22.1'
-      - name: Check out pinned melonDS source
-        run: |
-          git clone --recurse-submodules https://github.com/rafaelvcaetano/melonDS-android.git melonDS-android
-          git -C melonDS-android checkout --detach 909647ba95ce903797e0112fedae570732bfd9cc
-          git -C melonDS-android submodule update --init --recursive
-      - name: Apply overlay and compile source-check APK
-        env:
-          MELONDS_SOURCE_DIR: melonDS-android
-          ALLOW_MISSING_ROM: '1'
-        run: |
-          python3 scripts/apply_overlay.py
-          cd melonDS-android
-          bash ./gradlew :app:assembleGitHubProdDebug
-      - name: Upload source-check APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: pokemon-white2-source-check
-          path: melonDS-android/app/build/outputs/apk/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Build an original crash reproduction and a generated cartridge for Android QA
-        env:
-          PREVIOUS_COMMIT: ef581b3d501ed8e3a02560e3a7c04ed1713d43b6
-          PREVIOUS_PROFILE: 55807e5616b48326bd5c7c7babe2d39a6ecbf3b6
-        run: |
-          mkdir -p qa
-          launcher=app/src/main/java/org/syun/pokemonw2/StandaloneLauncherActivity.kt
-          apk=melonDS-android/app/build/outputs/apk/gitHubProd/debug/app-gitHub-prod-debug.apk
-          cp "melonDS-android/$launcher" "$RUNNER_TEMP/launcher-fixed.kt"
-          cp melonDS-android/app/build.gradle.kts "$RUNNER_TEMP/build-fixed.gradle.kts"
-          git fetch --no-tags --depth=1 origin "$PREVIOUS_COMMIT" "$PREVIOUS_PROFILE"
-          git show "$PREVIOUS_COMMIT:overlay/$launcher" > "melonDS-android/$launcher"
-          sed -i -e 's/versionCode = [0-9][0-9]*$/versionCode = 1/' -e 's/versionName = "[0-9.]*"/versionName = "1.0.0"/' melonDS-android/app/build.gradle.kts
-          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
-          cp "$apk" qa/v100.apk
-          cp "$RUNNER_TEMP/launcher-fixed.kt" "melonDS-android/$launcher"
-          cp "$RUNNER_TEMP/build-fixed.gradle.kts" melonDS-android/app/build.gradle.kts
-          python3 scripts/check-game-render.py prepare melonDS-android
-          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
-          cp "$apk" qa/candidate-test-display.apk
-          git show "$PREVIOUS_PROFILE:overlay/$launcher" > "melonDS-android/$launcher"
-          test_hash=$(sha256sum melonDS-android/app/src/main/assets/bundled/pokemon_white2.nds | cut -d' ' -f1)
-          sed -i "s/3b3f91fe0e4cc323ea73a1d6242fa04b255d98c4e44971594624bad919713a7b/$test_hash/g" "melonDS-android/$launcher"
-          sed -i -e 's/versionCode = [0-9][0-9]*$/versionCode = 2/' -e 's/versionName = "[0-9.]*"/versionName = "1.0.1"/' melonDS-android/app/build.gradle.kts
-          (cd melonDS-android && bash ./gradlew :app:assembleGitHubProdDebug)
-          cp "$apk" qa/v101-test-display.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: two-version-render-test-only
-          path: qa/*.apk
-          if-no-files-found: error
-          retention-days: 14
-
-  check-launcher:
-    needs: compile-overlay
-    runs-on: ubuntu-latest
-    name: Android API ${{ matrix.api }} update and native game display
-    timeout-minutes: 24
-    strategy:
-      fail-fast: false
-      matrix:
-        api: [30, 36]
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - name: Generate one-time recipient for this runner
+        run: |
+          umask 077
+          openssl req -x509 -newkey rsa:3072 -nodes -keyout "$RUNNER_TEMP/recipient.key" -out "$RUNNER_TEMP/recipient.pem" -days 1 -subj '/CN=Android QA ephemeral recipient' 2>/dev/null
+      - uses: actions/upload-artifact@v4
         with:
-          name: two-version-render-test-only
-          path: qa
-      - name: Enable KVM for the test device
+          name: ephemeral-public-certificate
+          path: ${{ runner.temp }}/recipient.pem
+          retention-days: 1
+      - name: Enable virtual device
         run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
-      - name: Install and open the launcher on Android
+      - name: Exercise the signed release
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.api }}
-          ram-size: 4096M
+          api-level: 36
           target: google_apis
           arch: x86_64
+          ram-size: 4096M
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -camera-back none
-          script: python3 scripts/check-game-render.py verify qa/v100.apk qa/v101-test-display.apk qa/candidate-test-display.apk
+          script: python3 scripts/private-device-check.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: render-evidence-api-${{ matrix.api }}
-          path: qa/evidence/
+          name: encrypted-device-evidence
+          path: ${{ runner.temp }}/evidence.sealed
           if-no-files-found: ignore
-          retention-days: 5
+          retention-days: 2
