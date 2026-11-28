@@ -38,16 +38,19 @@ def payload():
 def test():
     inputs = payload()
     key = bytes.fromhex(inputs["key"])
-    url = inputs["url"]
     from urllib.parse import urlparse
-    host = urlparse(url).hostname or ""
-    if urlparse(url).scheme != "https" or not host.endswith((".oaiusercontent.com",".blob.core.windows.net",".amazonaws.com")):
-        raise RuntimeError("Invalid stage host")
-    try:
-        with urllib.request.urlopen(url, timeout=120) as stream:
-            encrypted = stream.read(210000000)
-    except Exception:
-        raise RuntimeError("Temporary delivery could not be retrieved") from None
+    parts = []
+    for url in inputs["urls"]:
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme != "https" or not host.endswith((".oaiusercontent.com", ".blob.core.windows.net", ".amazonaws.com")):
+            raise RuntimeError("Invalid stage host")
+        try:
+            with urllib.request.urlopen(url, timeout=120) as stream:
+                parts.append(stream.read(104000000))
+        except Exception:
+            raise RuntimeError("Temporary delivery could not be retrieved") from None
+    encrypted = b"".join(parts)
+    del parts
     aes = AESGCM(key)
     apk = aes.decrypt(encrypted[:12], encrypted[12:], b"apk-1.0.2")
     if hashlib.sha256(apk).hexdigest() != sha:
